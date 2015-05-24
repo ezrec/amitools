@@ -380,3 +380,20 @@ class ExecLibrary(AmigaLibrary):
     AccessStruct(ctx.mem, NodeDef, succ).w_s("ln_Pred", pred)
     return node_addr
 
+  # ----- Semaphores -----
+  
+  def InitSemaphore(self, ctx):
+    sem_addr = ctx.cpu.r_reg(REG_A0)
+    sem = AccessStruct(ctx.mem, SignalSemaphoreDef, sem_addr)
+    log_exec.info("InitSemaphore(%06x)", sem_addr)
+    wq_tail_ptr = sem.r_s("ss_WaitQueue.mlh_Tail")
+    wq_head_ptr = sem.r_s("ss_WaitQueue.mlh_Head")
+    sem.w_s("ss_WaitQueue.mlh_Head", wq_tail_ptr)
+    sem.w_s("ss_WaitQueue.mlh_Tail", 0)
+    sem.w_s("ss_WaitQueue.mlh_TailPred", wq_head_ptr)
+    sem.w_s("ss_Link.ln_Type", NT_SIGNALSEM)
+    sem.w_s("ss_NestCount", 0)
+    sem.w_s("ss_Owner", 0)
+    sem.w_s("ss_QueueCount", -1)
+
+
