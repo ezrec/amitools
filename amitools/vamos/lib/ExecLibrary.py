@@ -358,6 +358,8 @@ class ExecLibrary(AmigaLibrary):
     log_exec.info("WaitPort: got message %06x" % (msg_addr))
     return msg_addr
 
+  # ----- Lists -----
+  
   def AddTail(self, ctx):
     list_addr = ctx.cpu.r_reg(REG_A0)
     node_addr = ctx.cpu.r_reg(REG_A1)
@@ -375,7 +377,7 @@ class ExecLibrary(AmigaLibrary):
     n = AccessStruct(ctx.mem, NodeDef, node_addr)
     succ = n.r_s("ln_Succ")
     pred = n.r_s("ln_Pred")
-    log_exec.info("Remove(%06x): ln_Pred=%06x ln_Succ=%06x" % (node_addr, pred, succ))
+    log_exec.info("Remove(%06x): ln_Pred=%06x ln_Succ=%06x", node_addr, pred, succ)
     AccessStruct(ctx.mem, NodeDef, pred).w_s("ln_Succ", succ)
     AccessStruct(ctx.mem, NodeDef, succ).w_s("ln_Pred", pred)
     return node_addr
