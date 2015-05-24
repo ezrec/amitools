@@ -51,3 +51,23 @@ def taglist_parse_tagitem_ptr(mem, addr, tag_info=None):
       result.add(tag,data)
       addr += 8
   return result
+
+def taglist_find_tagitem(mem, addr, tag_match, default = None):
+  result = default
+  while True:
+    tag = mem.access.r32(addr)
+    data = mem.access.r32(addr+4)
+    if tag == TAG_DONE:
+      break
+    elif tag == TAG_IGNORE:
+      addr += 8
+    elif tag == TAG_SKIP:
+      addr += 8
+    elif tag == TAG_MORE:
+      addr = data
+    elif tag == tag_match:
+      result = data
+      break
+    else:
+      addr += 8
+  return result
