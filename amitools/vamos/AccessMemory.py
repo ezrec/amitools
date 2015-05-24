@@ -8,6 +8,9 @@ class AccessMemory:
   def __init__(self, mem):
     self.mem = mem
 
+  def clear_mem(self, addr, size, val):
+    self.mem.clear_block(addr, size, val)
+
   def write_mem(self, width, addr, val):
     self.mem.write_mem(width, addr, val)
     if self.label_mgr != None:
@@ -19,6 +22,9 @@ class AccessMemory:
       self.label_mgr.trace_int_mem('R',width, addr, val)
     return val
 
+  def r64(self, addr):
+    return self.read_mem(3, addr)
+  
   def r32(self, addr):
     return self.read_mem(2, addr)
   
@@ -27,6 +33,9 @@ class AccessMemory:
   
   def r8(self, addr):
     return self.read_mem(0, addr)
+
+  def w64(self, addr, val):
+    self.write_mem(3, addr, val)
 
   def w32(self, addr, val):
     self.write_mem(2, addr, val)
