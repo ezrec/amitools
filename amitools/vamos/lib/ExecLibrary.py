@@ -4,6 +4,9 @@ from amitools.vamos.Log import log_exec
 from amitools.vamos.Exceptions import *
 from amitools.vamos.AccessStruct import AccessStruct
 
+NT_SIGNALSEM = 15
+NT_LIBRARY = 9
+
 class ExecLibrary(AmigaLibrary):
   name = "exec.library"
 
@@ -88,6 +91,147 @@ class ExecLibrary(AmigaLibrary):
     ctx.cpu.w_reg(REG_A7, new_pointer)
     
   # ----- Libraries -----
+  
+  def InitStruct(self, ctx):
+    table_ptr = ctx.cpu.r_reg(REG_A1)
+    struct_ptr = ctx.cpu.r_reg(REG_A2)
+    size = ctx.cpu.r_reg(REG_D0)
+    size &= 0xffff
+    log_exec.info("InitStruct(table=%06x, struct=%06x, size=%d)", table_ptr, struct_ptr, size)
+    ctx.mem.access.clear_mem(struct_ptr, size, 0)
+    op = ctx.mem.access.r8(table_ptr)
+    dest_ptr = struct_ptr
+    while op != 0:
+      ty = (op >> 6) & 0x3
+      sz = (op >> 4) & 0x3
+      cnt = (op >> 0) & 0xf
+      log_exec.info(" ty=%d, sz=%d, cnt=%d", ty, sz, cnt)
+
+      # Skip the action byte
+      table_ptr = table_ptr + 1
+
+      if ty == 0 or ty == 1:
+        # No more information
+        off = 0
+      elif ty == 2:
+        # Skip the action byte, get the offset
+        off = ctx.mem.access.r8(table_ptr)
+      elif ty == 3:
+        off = (ctx.mem.access.r8(table_ptr) << 16) | ctx.mem.access.r8(table_ptr + 1)
+        table_ptr = table_ptr + 3
+      
+      if sz == 0:
+        # Align to long
+        al = 4
+      elif sz == 1:
+        al = 2
+      elif sz == 2:
+        al = 1
+      elif sz == 3:
+        al = 8
+
+      table_ptr  = (table_ptr + (al - 1)) & ~(al - 1)
+      dest_ptr   = (dest_ptr  + (al - 1)) & ~(al - 1)
+
+      if ty == 2 or ty == 3:
+        # Add offset then copy
+        dest_ptr = struct_ptr + off
+      
+      if ty == 0 or ty == 2 or ty == 3:
+        if sz == 0:
+          while cnt > 0:
+            tmp = ctx.mem.access.r32(table_ptr)
+            ctx.mem.access.w32(dest_ptr, tmp)
+            dest_ptr = dest_ptr + 4
+            table_ptr = table_ptr + 4
+            cnt = cnt - 1
+        elif sz == 1:
+          while cnt > 0:
+            tmp = ctx.mem.access.r16(table_ptr)
+            ctx.mem.access.w16(dest_ptr, tmp)
+            dest_ptr = dest_ptr + 2
+            table_ptr = table_ptr + 2
+            cnt = cnt - 1
+        elif sz == 2:
+          while cnt > 0:
+            tmp = ctx.mem.access.r8(table_ptr)
+            ctx.mem.access.w8(dest_ptr, tmp)
+            dest_ptr = dest_ptr + 1
+            table_ptr = table_ptr + 1
+            cnt = cnt - 1
+        elif sz == 3:
+          while cnt > 0:
+            tmp = ctx.mem.access.r64(table_ptr)
+            ctx.mem.access.w64(dest_ptr, tmp)
+            dest_ptr = dest_ptr + 8
+            table_ptr = table_ptr + 8
+            cnt = cnt - 1
+      elif ty == 1:
+        # Action: Repeat element
+        if sz == 0:
+          tmp = ctx.mem.access.r32(table_ptr)
+          while cnt > 0:
+            ctx.mem.access.w32(dest_ptr, tmp)
+            dest_ptr = dest_ptr + 4
+            cnt = cnt - 1
+        elif sz == 1:
+          tmp = ctx.mem.access.r16(table_ptr)
+          while cnt > 0:
+            ctx.mem.access.w16(dest_ptr, tmp)
+            dest_ptr = dest_ptr + 2
+            cnt = cnt - 1
+        elif sz == 2:
+          tmp = ctx.mem.access.r8(table_ptr)
+          while cnt > 0:
+            ctx.mem.access.w8(dest_ptr, tmp)
+            dest_ptr = dest_ptr + 1
+            cnt = cnt - 1
+        elif sz == 3:
+          tmp = ctx.mem.access.r64(table_ptr)
+          while cnt > 0:
+            ctx.mem.access.w64(dest_ptr, tmp)
+            dest_ptr = dest_ptr + 8
+            cnt = cnt - 1
+      table_ptr = (table_ptr + (4 - 1)) & ~(4 - 1)
+      op = ctx.mem.access.r8(table_ptr)
+    
+  def MakeFunctions(self, ctx):
+    target_ptr = ctx.cpu.r_reg(REG_A0)
+    fnarr_ptr  = ctx.cpu.r_reg(REG_A1)
+    fnbase_ptr = ctx.cpu.r_reg(REG_A2)
+    n = 1
+    if fnbase_ptr != 0:
+      fp = fnbase_ptr
+      fd = ctx.mem.access.r16(fp)
+      while fd != 0xffff:
+        vec_ptr = target_ptr - (n * 4)
+        ctx.mem.access.w16(vec_ptr, 0x4EF9)
+        ctx.mem.access.w32(vec_ptr + 2, fnbase_ptr + fd)
+        fp = fp + 2
+        fd = ctx.mem.access.r16(fp)
+        n = n + 1
+    else:
+      fa = fnarr_ptr
+      fn = ctx.cpu.r32(fa)
+      while fn != 0xffffffff:
+        vec_ptr = target_ptr - (n * 4)
+        ctx.mem.access.w16(vec_ptr, 0x4EF9)
+        ctx.mem.access.w32(vec_ptr + 2, fn)
+        fa = fa + 4
+        fn = ctx.mem.access.r32(fa)
+        n = n + 1
+    n = n - 1
+    log_exec.info("MakeFunctions(target=%06x, fnarr=%06x, fnbase=%06x) => %d", target_ptr, fnarr_ptr, fnbase_ptr, n)
+    return n
+
+  def AddLibrary(self, ctx):
+    lib_ptr = ctx.cpu.r_reg(REG_A1)
+    lib = AccessStruct(ctx.mem, LibraryDef, lib_ptr)
+    # Set up lib_Node
+    lib.w_s("lib_Node.ln_Succ", lib_ptr)
+    lib.w_s("lib_Node.ln_Pred", lib_ptr)
+    lib.w_s("lib_Node.ln_Type", NT_LIBRARY)
+    return lib_ptr
   
   def OpenLibrary(self, ctx):
     ver = ctx.cpu.r_reg(REG_D0)
