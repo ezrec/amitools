@@ -598,6 +598,16 @@ class DosLibrary(AmigaLibrary):
     else:
       return lock.b_addr
 
+  def SetFileDate(self, ctx):
+    # TODO: Not implemented, but return DOSTRUE to
+    #       prevent errors in calling programs
+    return self.DOSTRUE
+
+  def SetComment(self, ctx):
+    # TODO: Not implemented, but return DOSTRUE to
+    #       prevent errors in calling programs
+    return self.DOSTRUE
+
   # ----- DevProc -----
 
   def GetDeviceProc(self, ctx):
